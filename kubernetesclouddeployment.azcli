@@ -1,0 +1,29 @@
+az login --use-device-code
+az account show
+az account list --all --output table
+
+az account set --subscription 09688c0b-8d07-41e6-ad43-b4a1b7329fbc
+
+az group create --name kuberneteslab --location eastus2
+#az group delete --name kuberneteslab
+az group list --output table
+
+#Create VNET and SUBNET
+
+az network vnet create --name vnet-kuberneteslab --resource-group kuberneteslab --location eastus2 --subnet-name subnet-kuberneteslab
+az network vnet list --output table
+
+# Create NSG and Update Subnets
+az network nsg create --resource-group kuberneteslab --name nsg-kubernetes
+
+az network nsg rule create --resource-group kuberneteslab --nsg-name nsg-kubernetes --name AllowHTTP --protocol tcp --priority 1000 --destination-port-range 80 --access allow --direction inbound
+az network nsg rule create --resource-group kuberneteslab --nsg-name nsg-kubernetes --name AllowHTTPS --protocol tcp --priority 1010 --destination-port-range 443 --access allow --direction inbound
+az network nsg rule create --resource-group kuberneteslab --nsg-name nsg-kubernetes --name AllowSSH --protocol tcp --priority 1020 --destination-port-range 22 --access allow --direction inbound
+
+az network vnet subnet update --resource-group kuberneteslab --vnet-name vnet-kuberneteslab --name subnet-kuberneteslab --network-security-group nsg-kubernetes
+
+#Create a public IP address
+az network public-ip create --resource-group kuberneteslab --name pip-kuberneteslab-01 --sku Basic --allocation-method Static
+az network public-ip show --resource-group kuberneteslab --name pip-kuberneteslab-01
+
+
