@@ -4,17 +4,17 @@ az account show
 az account list --all --output table
 
 #Parameters
-SUBCRIPTION="09688c0b-8d07-41e6-ad43-b4a1b7329fbc"
+SUBSCRIPTION="09688c0b-8d07-41e6-ad43-b4a1b7329fbc"
 LOCATION="eastus"
-RESOURCEGROUP="kuberneteslab"
-VNET_NAME="vnet-$RESOURCE_GROUP"
+RESOURCEGROUP="linuxlab"
+VNET_NAME="vnet-$RESOURCEGROUP"
 SUBNET_NAME="subnet-$RESOURCEGROUP"
 NSG_NAME="nsg-$RESOURCEGROUP"
 PIP_NAME="pip-$RESOURCEGROUP"
 
 
 #Set Subscription
-az account set --subscription $SUBCRIPTION
+az account set --subscription $SUBSCRIPTION
 
 #Resource Group
 
@@ -38,14 +38,14 @@ az network vnet subnet update --resource-group $RESOURCEGROUP --vnet-name $VNET_
 
 #Create a public IP address
 az network public-ip create --resource-group $RESOURCEGROUP --name $PIP_NAME --sku Basic --allocation-method Static
-az network public-ip show --resource-group $RESOURCEGROUP --name $PIP_NAME
+az network public-ip show --resource-group $RESOURCEGROUP --name $PIP_NAME --output table
 
 
 #VM Creation - Parameters
-VM_NAME="vm-$RESOURCEGROUP-01"
+VM_NAME="vm-$RESOURCEGROUP-02"
 VM_ADMIN="kubeadmin"
 VM_SECRET="K8ClusterR0l"
-VM_SKU=""
+VM_SKU="Standard_D2s_v4"
 VM_IMAGE="Ubuntu2204"
 
 
@@ -55,9 +55,28 @@ az vm create \
   --resource-group $RESOURCEGROUP \
   --location $LOCATION \
   --vnet-name $VNET_NAME \
-  --subnet subnet-$RESOURCEGROUP \
-  --nsg nsg-$RESOURCEGROUP \
-  --public-ip-address pip-$RESOURCEGROUP-01 \
+  --subnet $SUBNET_NAME \
+  --nsg $NSG_NAME \
+  --image $VM_IMAGE \
+  --size $VM_SKU \
+  --priority Spot \
+  --eviction-policy Deallocate \
+  --max-price -1 \
+  --admin-username $VM_ADMIN \
+  --admin-password $VM_SECRET \
+  --authentication-type password \
+  --no-wait
+
+
+#VM Template
+az vm create \
+  --name $VM_NAME \
+  --resource-group $RESOURCEGROUP \
+  --location $LOCATION \
+  --vnet-name $VNET_NAME \
+  --subnet $SUBNET_NAME \
+  --nsg $NSG_NAME \
+  --public-ip-address $PIP_NAME \
   --image $VM_IMAGE \
   --size $VM_SKU \
   --priority Spot \
@@ -72,3 +91,4 @@ az vm create \
 
 az vm list --output table
 az vm nic list --vm-name $VM_NAME --resource-group $RESOURCE_GROUP --output table
+az vm list-sizes --location $LOCATION --output table
