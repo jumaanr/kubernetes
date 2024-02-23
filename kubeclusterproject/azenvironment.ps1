@@ -1,3 +1,5 @@
+# Note : Following script will create a necessary virtual network and infrastructure
+
 #dependancies
 Install-Module -Name Az -AllowClobber -Scope CurrentUser
 Update-Module -Name Az
@@ -30,7 +32,7 @@ Get-AzResourceGroup
 # Create a new Azure Resource Group
 New-AzResourceGroup -Name $resourceGroupName -Location $location
 
-# Create VNet and Subnet
+#------------------------- Create VNet and Subnet
 
 # Create the Azure Virtual Network
 $vnet = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName -Location $location -Name $vnetName -AddressPrefix $vnetAddressSpace
@@ -42,7 +44,7 @@ Write-Host "Subnet '$subnetName' added to Virtual Network '$vnetName'."
 
 
 
-# Create the Network Security Group (NSG)
+#----------------------------Create the Network Security Group (NSG)
 $nsg = New-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Location $location -Name $nsgName
 Write-Host "Network Security Group '$nsgName' created."
 
@@ -66,3 +68,4 @@ Write-Host "NSG '$nsgName' associated with subnet '$subnetName'."
 # Create a new public IP
 New-AzPublicIpAddress -Name $publicIPName -ResourceGroupName $resourceGroupName -Location $location -Sku Standard -AllocationMethod Static
 
+#------------------ VM Creation---------------------#

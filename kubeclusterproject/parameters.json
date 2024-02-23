@@ -1,0 +1,60 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "value": "eastus"
+        },
+        "networkInterfaceName": {
+            "value": "kubemaster331"
+        },
+        "enableAcceleratedNetworking": {
+            "value": true
+        },
+        "networkSecurityGroupId": {
+            "value": "/subscriptions/b08d6f99-9bea-4c84-a6bc-3d3b2dfe1a7d/resourceGroups/kubecluster/providers/Microsoft.Network/networkSecurityGroups/nsg-kubecluster"
+        },
+        "subnetName": {
+            "value": "snet-kubecluster"
+        },
+        "virtualNetworkId": {
+            "value": "/subscriptions/b08d6f99-9bea-4c84-a6bc-3d3b2dfe1a7d/resourceGroups/kubecluster/providers/Microsoft.Network/virtualNetworks/vnet-kubecluster"
+        },
+        "publicIpAddressId": {
+            "value": "/subscriptions/b08d6f99-9bea-4c84-a6bc-3d3b2dfe1a7d/resourceGroups/kubecluster/providers/Microsoft.Network/publicIPAddresses/pip-kubemaster"
+        },
+        "pipDeleteOption": {
+            "value": "Detach"
+        },
+        "virtualMachineName": {
+            "value": "kubemaster"
+        },
+        "virtualMachineComputerName": {
+            "value": "kubemaster"
+        },
+        "virtualMachineRG": {
+            "value": "kubecluster"
+        },
+        "osDiskType": {
+            "value": "StandardSSD_LRS"
+        },
+        "osDiskDeleteOption": {
+            "value": "Delete"
+        },
+        "virtualMachineSize": {
+            "value": "Standard_D2as_v5"
+        },
+        "nicDeleteOption": {
+            "value": "Detach"
+        },
+        "hibernationEnabled": {
+            "value": false
+        },
+        "adminUsername": {
+            "value": "kubeadmin"
+        },
+        "customData": {
+            "value": null
+        }
+    }
+}
