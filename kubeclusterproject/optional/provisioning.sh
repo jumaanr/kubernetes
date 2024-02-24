@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#--------------- Prepare your environment----------#
+#--------------- Install Azure CLI (Optional)----------#
 # This environment is prepped for Ubuntu Debian Kernel
 #Update package sources
 sudo apt-get update
