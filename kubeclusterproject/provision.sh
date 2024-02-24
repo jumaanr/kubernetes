@@ -8,7 +8,7 @@ sudo ufw enable
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw allow 22/tcp
-sudo ufw allow 6643/tcp
+sudo ufw allow 6443/tcp
 sudo ufw allow 2379/tcp
 sudo ufw allow 2380/tcp
 sudo ufw allow 10250/tcp
