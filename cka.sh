@@ -469,6 +469,16 @@ kubectl logs my-custom-scheduler --name-space=kube-system
 
 #!-----------------------Loggin and Monitoring -------------------------------------#
 
+#?--- Monitoring ---#
+# Metrics server in Memory monitoring solution
+kubectl top node #provides CPU and memory consumption of each node
+kubectl top pod #view performance metrices of k8 pods
+
+
+#? --- Logging ---#
+kubectl logs -f <name_ofPod> <container_name>
+kubectl logs -f event-simulator-pod event-simulator # get logs of certain pod or container , -f gives live logs
+
 #!----------------------- Application Lifecycle Management--------------------------#
 
 #!----------------------- Cluster Maintenance --------------------------------------#
