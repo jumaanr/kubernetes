@@ -50,6 +50,8 @@ ctrl b // # split horizontally
 
 # kubectl cheat sheet : https://kubernetes.io/docs/reference/kubectl/quick-reference/
 
+#TODO  copy pasting hacks :  SHIFT + V , then shift > (indent 1 tab), press 2 and then shift > for 2 tabspace
+
 #!---------------------- Core Concepts----------------------------------------------#
 
 #? --- Docker vs Containerd--- #
@@ -311,11 +313,159 @@ kubectl create service nodeport nginx --tcp=80:80 --node-port=30080 --dry-run=cl
 
 #!---------------------- Scheduling ------------------------------------------------#
  #?-- Manual Scheduling --#
- #?--- Resource Limits ---#
- #?--- Daemon Sets ---#
- #?--- Multiple Schedulers ---#
- #?--- Scheduler Events ---#
- #?--- Configure Kubernetes Scheduler ---#
+# manual scheduling allows you to place pods on desired nodes
+#* this can be done before creation of pods by adding nodeName: key under specs of the pod definition : https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodename
+#-----in a pod definition file---#
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+  nodeName: kube-01
+#--------
+
+# if scheduler is not there , the pods will be in pending state. As a workaraound you may manually assign pods . However, the nodeNode cannot be changed once a POD created. Because its a binding object to the pod
+#* solution : create a podbinding object and parse it via a POST request
+
+apiVersion: v1
+kind: Binding
+metadata:
+  name: nginx
+target:
+  apiVersion: v1
+  kind: Node
+  name: node02
+
+# after convert above to a json format and send a POST request
+
+ #?--- Labels and Selectors ---#
+
+#In POD Definition file
+#------------
+metadata:
+  name: pod_name
+  labels:
+    app: front-end
+  annotations:
+    buildversion: 1.134
+#------------
+# once specified you can perform search
+kubectl get pods --selector app=App1
+kubectl get pod --selector env=prod,bu=finance,tier=frontend --no-headers | wc -l # gets the count without headers
+
+#In Deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app:App1 # we are concerned about the lables of pods
+
+# Annotations : keep record of other details in object
+
+#?--- Taints and Tolerations --#
+
+# ref : https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+#applying a taint means applying a pod repellent spray on node :) | So no unwated pod going to be placed on this node #* Taints are applied on Nodes
+#toleration : make a pod tolerant to a particular taints | #* Tolerations are applied on pods
+
+kubectl taint nodes node-name key=value:taint-effect # taint effect means what happens to pods if they do not tolerate this taint
+# Noschedule - pods wont be scheduled to be placed , PreferNoSchedule : may be pods will be scheduled, but less likely , Noexecute: Pods will not be scheduled and current pods will evicted with matching criteria
+# example : 
+kubectl taint nodes node1 key1=value1:NoSchedule #no pod will be able to schedule into node1
+kubectl taint nodes node1 key1=value1:NoSchedule- # untainted using - symbox
+# all of toleration should be quoted in "" 
+# FACT : a taint has been set on master node when kubernetes setup to ensure no other pod deployed on master node
+kubectl describe node kubemaster | grep Taint # will show the taint
+
+#?--- Node Selectors ---#
+# label the node prior to pod creation : https://kubernetes.io/docs/tasks/configure-pod-container/assign-pods-nodes/ " Assign pods nodes"
+kubectl label nodes <your-node-name> <label-key>=<label-value>
+kubectl get nodes --show-labels
+# then specify the nodeSelector in pod definition matching the same label specified in the node
+
+#?--- Node Affinity ---#
+# ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+# ref : https://kubernetes.io/docs/tasks/configure-pod-container/assign-pods-nodes-using-node-affinity/
+
+# First add a lable to node
+kubectl label nodes <your-node-name> <label-key>=<label-value>
+# then configure node affinity in pods and create pods
+# Operator : In -matches the values , NotIn pods that are not matching values, Exists : whether such a label exists , 
+# what if node was not lableled , what happens to pod : Thats why we have following Node Affinity types.
+# available:
+requiredDuringSchedulingIgnoredDuringExecution
+preferredDuringSchedulingIgnoredDuringExecution 
+# advanced planned:
+requiredDuringSchedulingRequiedDuringExecution #* will evict any pods running on nodes since requiredDuringExecution
+preferredDuringSchedulingRequiedDuringExecution
+
+# Conclustion : Taints and Tolerations ensure node would accept only the specified pods (but does not guarentee the tolrate pods will be always placed on tainted nodes). Node affinity ensure the pods would be placed on desired nodes (But does not guarentee other pods will place on the specified nodes). So the right solution is a combination of both.
+
+#?--- Resource Limits ---#
+# Search "Resource Management for Pods and Containers" and "Assign CPU Resources to Containers and Pods" #* In POD Level
+# https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/  , https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/
+# 1cpu = 1 aws vCPU , 1 GCP core, 1 Azure Core , 1 Hyperthread in VMWare
+# 1Gi = 1 GibiByte
+# Resource Requests , Resource Limits
+# CPU will not be exceeded , but Memory limits can be exceeeded and pod will be evicated if it keeps banging on the memory limit always #! "TERMINATE" due to "OOM (Out of Memory)"
+# default Memory=512Mi
+# ideal setting interms of CPU requests : Resource Requests are defined , Resource Limits are not defined (If there's no requests for resources , then you can consume it )
+# for memory its the same , but you have to destriy the pod and recreate . Since you cannot throttle memory
+
+#* Limit resouces in namespace level for PODs 
+# https://kubernetes.io/docs/tasks/administer-cluster/manage-resources/memory-default-namespace/
+# https://kubernetes.io/docs/concepts/policy/limit-range/
+# limit ranges does not effect on existing pods, but new pods will be impacted 
+
+# usecase : limit total memory that should consumed by all the pods collectively #* This is achieved by Resource Quotas in Namespace levels
+#* Important :  https://kubernetes.io/docs/tasks/administer-cluster/manage-resources/
+# https://kubernetes.io/docs/tasks/administer-cluster/manage-resources/quota-memory-cpu-namespace/
+
+#TODO : Special Note : You cannot edit all the properties on a pod using edit command ( look at the Forbidden parameters in the header ) , but you can edit deployments : https://kodekloud.com/topic/a-quick-note-on-editing-pods-and-deployments-2/
+
+#?--- Daemon Sets ---#
+
+# Daemonsets automatically spwan a copy of instance in every node, whenever a node is added to the cluster
+# Daemonsets ensure a one copy of the pod always present in all nodes in the cluster
+# Usecase : Monitoring Agent, Log collector , kube-proxy , weavenet 
+# definition file is same as Replicaset or Deployment : https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/ 
+kubectl create -f daemon-set-definition.yaml
+kubectl get daemonsets
+k get daemonset kube-proxy -n kube-system
+kubectl describe daemonsets
+
+# earlier kubernetes used nodeName to place pods on nodes, after kubernetes v1.12 it uses NodeAffinity rules
+# if you use a deployment or deplicase template , make sure to remove replicas feild in the definition file
+
+#?--- Static Pods ---#
+# static pod: No need controlplane node, work on their own. Only can create pods in the node . No deployments etc. 
+# kubelet reads the definition files in following directory and create pods
+/etc/kubernetes/manifests
+# kubelet take care of the pods in that directory
+# can be any directory , configure as following
+
+kubectl run --restart=Never --image=busybox static-busybox --dry-run=client -o yaml --command -- sleep 1000 > /etc/kubernetes/manifests/static-busybox.yaml
+# kubelet config file location /var/lib/kubelet/ look for config.yaml there you have the options
+
+# check this location and find the kubelet.service configuration /usr/lib/systemd/system/kubelet.service.d 
+# then find the kubelet configuration file with service options
+
+
+#?--- Multiple Schedulers ---#
+# ref : https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/
+
+#?--- Scheduler Events ---#
+
+kubectl get pods --namespace=kube-system #view scheduler
+# configure a scheduler of choice for a pod
+schedulerName: my-customer-scheduler # This comes under spec section of pod aligned with containers (on under) : https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/
+#! [ERROR] If scheduler is not configured correctly POD will remain in 'PENDING state'
+# view events of kubernetes api
+kubectl get events
+# view logs of kubernetes scheduler
+kubectl logs my-custom-scheduler --name-space=kube-system
+
+#?--- Configure Kubernetes Scheduler Profiles ---#
+# ref : https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/
 
 #!-----------------------Loggin and Monitoring -------------------------------------#
 
