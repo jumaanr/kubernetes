@@ -481,6 +481,30 @@ kubectl logs -f event-simulator-pod event-simulator # get logs of certain pod or
 
 #!----------------------- Application Lifecycle Management--------------------------#
 
+#? --- Rolling Updates and Rollbacks ---#
+#Deplyment strategies : Recreate (not the default) destroy all and recreate , Rolloing Update (Default)
+# Update meaning :  updating application versions , version of docker container used, updating labesl, updating number of replicas
+
+kubectl create -f deployment-definition.yaml  #create
+kubectl get deployments #get available deployments
+kubectl apply -f deployment-definiiton.yaml #update
+kubectl edit deployment deployment/webapp-deployment # Edit a running pod to update
+kubectl set image deployment/webapp-deployment nginx=nginx:1.9.1 #update
+kubectl rollout history deployment/webapp-deployment # history / see the revisions and history of the deployment
+kubectl rollout status deployment/webapp-deployment #status / check rollout status of the deployment
+kubectl rollout undo deployment/myapp-reployment # rollback  /  #deployment will destroy the pods in new replicaset, and older ones up in the old replicaset
+
+kubectl  create  -f  <deployment-definition.yaml>  --record  #Record option instruct Kubernetes to record the cause of change 'CHANGE-CAUSE' in rollout history
+#this record option available for all the update commands as well
+
+#? --- Configure Applications --#
+
+#? --- ---- Configuring Command and Arguments on applications
+
+#? --- ---- Configuring Environment Variables
+
+#? --- ---- Configuring Secrets
+
 #!----------------------- Cluster Maintenance --------------------------------------#
 
 #!----------------------- Security -------------------------------------------------#
