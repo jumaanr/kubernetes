@@ -50,7 +50,9 @@ ctrl b // # split horizontally
 
 # kubectl cheat sheet : https://kubernetes.io/docs/reference/kubectl/quick-reference/
 
-#TODO  copy pasting hacks :  SHIFT + V , then shift > (indent 1 tab), press 2 and then shift > for 2 tabspace
+#TODO  copy pasting into definition files hacks :  SHIFT + V , then shift > (indent 1 tab), press 2 and then shift > for 2 tabspace
+#TODO  crtl + SHIFT + V to copy paste
+
 
 #!---------------------- Core Concepts----------------------------------------------#
 
@@ -281,7 +283,7 @@ kubectl scale deployment nginx --replicas=5
 kubectl set image deployment nginx nginx=nginx:1.18
 kubectl create -f nginx.yaml
 kubectl replace -f nginx.yaml
-kubectl replace --force -f nginx.yamal # force delete and recreate the object
+kubectl replace --force -f nginx.yamal # force delete and recreate the object , sometimes edited file can be gound under /tmp/kubectl--XXX.yaml . Then use this command to replace (Delete the pod and recreate)
 kubectl delete -f nginx.yaml
 
 # declarative commands
@@ -500,10 +502,129 @@ kubectl  create  -f  <deployment-definition.yaml>  --record  #Record option inst
 #? --- Configure Applications --#
 
 #? --- ---- Configuring Command and Arguments on applications
+# https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/
+# style 1)
+spec:
+  containers:
+  - name: ubuntu
+    image: ubuntu
+    command:
+      - "sleep"
+      - "5000"
+# style 2)
+spec:
+  containers:
+  - name: ubuntu
+    image: ubuntu
+    command: ["sleep","5000"]
+    args: ["--color","pink"]
+#---EOF
+
+# Comparing Docker and Kubernetes Manifest files  ENTRYPOINT of Docker is equal to  command in Kubernetes manifest file. Arguments are just to run the arguments
+#Providing arguments at runtime :
+
+kubectl run nginx --image=nginx -- arg1 arg2
+kubectl run nginx --image=nginx -- --color green  # start the pod using the default command , but provide arguments
+
+kubectl run nginx --image=nginx --command -- --color green # start the pod with different command and custom arguments
+
 
 #? --- ---- Configuring Environment Variables
+# can be configured as a single environment variable or inject data as configmap
+# define environment variables : https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/
+spec:
+  containers:
+    - name:
+      env:
+        - name: color
+          value: pink
 
-#? --- ---- Configuring Secrets
+# store environment variables seperately in configmaps
+#?TODO--- ---- Config Map ---?#
+#* Config Maps are used to store configuration data
+# steps : create the config map -> inject them into the POD
+# Imparative way 
+kubectl create configmap \
+  <config-name> --from-literal=<key><value>
+
+kubectl create configmap \
+  app-config --from-literal=APP_COLOR=blue \
+            --from-literal=APP_MOD=prod
+
+kubectl create configmap <configMapName> --from-file=<path-tofile> # data of this are read and stored under the name of the file
+# declarative way : https://kubernetes.io/docs/concepts/configuration/configmap/
+# how to use config map in pods : https://kubernetes.io/docs/concepts/configuration/configmap/
+kubectl get configmaps
+kubectl describe configmaps
+# getting environment variables out of configmaps : Feed entire entirevariables from there , two methods env:  and envFrom:
+spec:
+  containers:
+    - name:
+      envFrom:
+        - configMapRef
+            name: app-config
+# https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/   #! Gives ConfigMap usages
+
+
+#TODO --- ---- Configuring Secrets ---- #
+# Secret is a kubernetes object that helps to store passwords or sensitive information , after that those secrets can be injected to POD definition files seperately
+# secrets can be configure in two ways : 1) Imperative way  2) Declarative way
+#---- imparative way:
+kubectl create secret generic <secret-name> --from-literal=<key>=<value>
+kubectl create secret generic app-secret --from-literal=DB_User=mysql \
+                                        -- from-literal=DB_Password=password
+
+# using a file which had stored scecrets (Not a yaml file), lets say file name is "secret"
+#---- BOF
+DB_User: mysql
+DB_Password: passwrd
+#---- EOF
+kubectl create secret generic <secret-name. --from-file=<path-to-file> # https://kubernetes.io/docs/tasks/configmap-secret/managing-secret-using-config-file/
+kubectl create secret generic app-secret --from-file=secret.propertiess
+
+#--- declarative way : from a file ---#
+echo -n 'mysql' | base 64 #this would encode the secret to base64, because we cannot keep plain text in secrets
+# then use : https://kubernetes.io/docs/concepts/configuration/secret/#serviceaccount-token-secrets
+# run kubectl create command and create secret
+
+# --- basic commands ---#
+kubectl get secrets # get the screts basic info
+kubectl describe secrets # get secret names 
+kubectl get secret <secretname> -o yaml # view secrets
+echo -n '&^S(F)DSFD' | base64 --decode
+
+#---- Secrets as environment variables in PODs ---#
+# with env: This would pass secret keys one by one # as a single environment variable
+# ref : https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#define-a-container-environment-variable-with-data-from-a-single-secret
+# with envFrom: Injecting all secret at once, Configure all key-value pairs in a Secret as container environment variables
+# ref : https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#configure-all-key-value-pairs-in-a-secret-as-container-environment-variables
+
+
+# ---- Secrets in PODs as volumes ---#
+# ref : https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#create-a-pod-that-has-access-to-the-secret-data-through-a-volume
+volumes:
+  - name:
+    secret:
+      secretName: app-secret
+#
+# ----- Encryption at rest : https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/
+
+kubectl create secret generic db-secret --from-literal=DB_Host=sql01 --from-literal=DB_User=root --from-literal=DB_Password=password123
+
+#? --- ---- Multi Container PODs --- ----#
+# ref : Communicate between containers in the same pod using shared volume ; https://kubernetes.io/docs/tasks/access-application-cluster/communicate-containers-same-pod-shared-volume/
+kubectl attach <pod-name> -c <container-name>  # kubectl attach, this command allows you to attach to a running container. This is useful for interacting with the container's standard input (stdin), output (stdout), and standard error (stderr) streams. It can be handy for debugging or directly interacting with processes running within your container.
+kubectl exec -it <pod-name> -- /bin/sh # this connecting to container shell and we can inspect things
+kubectl exec -it <pod-name> -c <container-name> -- /bin/sh #specifying the container itself , -- /bin/bash # this can be any command, here we just attach into shell, can be cat , vi command as well
+
+#? --- ---- Init Containers --- -----#
+# init containers run and complete before the actual container , can have more than one init container and they execute in the order mentioned 
+# If any of the initContainers fail to complete, Kubernetes restarts the Pod repeatedly until the Init Container succeeds.
+# use case : deploy code from a git repository (git clone) so the actual container can get the source code from extraction
+# ref : https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
+
+
+
 
 #!----------------------- Cluster Maintenance --------------------------------------#
 
@@ -516,3 +637,7 @@ kubectl  create  -f  <deployment-definition.yaml>  --record  #Record option inst
 #!------------------------ Installation , Configuration and Validation -------------#
 
 #!------------------------ Troubleshooting -----------------------------------------#
+kubectl describe pod <podname> # this gives the status of pod , to see what happened
+# when see container failing check the logs and see what happned there
+kubectl logs <podName> ] # check logs of a certain pod
+kubectl logs <podName> -c <containerName> # check logs specified for a certain container in pod

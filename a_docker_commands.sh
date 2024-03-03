@@ -139,7 +139,9 @@ ENTRYPOINT["sleep"]  # the command line parameter get appended , in CMD the comm
 
 #configuring a default value
 ENTRYPOINT["sleep"]
-CMD["5"]  #so the default value of CMD get appended to the entrypoint . At the start it will kick sleep 5 , unless specified
+CMD["5"]  #so the default value of CMD get appended to the entrypoint . At the start it will kick sleep 5 , unless specified #* Important to have these specified in JSON format
+
+# overriding entry point value
 
 docker  run  --entry-point   sleep2.0   ubuntu-sleeper 10 #overried the command at startup, here ENTRYPOINT ["sleep"] but we want to change it during runtime as sleep2.0
 #so the final command will be :  sleep2.0 10
