@@ -628,7 +628,192 @@ kubectl exec -it <pod-name> -c <container-name> -- /bin/sh #specifying the conta
 
 #!----------------------- Cluster Maintenance --------------------------------------#
 
+#? --- ---- OS Upgrades --- -----#
+#  When you drain node, the pods are gracefully terminated from the current node and deployed on available nodes. During this time the node which is draining marked as cordoned or no schedulable. 
+# No pods can be scheduled on this node until you specifically remove these restrictions. 
+
+kubectl drain nodeName # drain all workloads
+kubectl cordon nodeName # make a node unschedulable, does not evict pods or terminate from note. Only makes that node unschedulable for new pods
+kubectl uncordon nodeName # make node available to schedule after maintenance
+
+#? --- ---- Kubernetes Software Versions --- -----#
+kubectl get nodes # shows the specific version of kubernetes installed
+# v1.11.3 : v1 - major version , 11 - minor version , 3 - patch
+
+#? --- ---- Cluster Upgrade Process --- -----#
+# https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
+sudo apt-mark unhold kubeadm && \
+sudo apt-get update && sudo apt-get install -y kubeadm='1.28.7-*' && \
+sudo apt-mark hold kubeadm
+
+sudo apt-mark unhold kubelet kubectl && \
+sudo apt-get update && sudo apt-get install -y kubelet='1.28.7-*' kubectl='1.29.7-*' && \
+sudo apt-mark hold kubelet kubectl
+
+#? --- ---- Cluster Upgrade - kubeadm --- -----#
+# ref : https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
+# ref : https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/change-package-repository/
+
+#* upgrading master node [controlplane] : All control-plane components must be in the same version except etcd cluster
+
+kubectl get nodes # see the version of K8s
+kubectl version # check kubectl version
+kubeadm version # check kubeadm version
+
+# ensure nodes have no taints or noschedule enabled
+kubeadm upgrade plan # check to what version the kubernetes components can be upgraded
+kubectl drain controlplane --ignore-daemonsets
+
+#update package repositories located at /etc/apt/sources.list.d/kubernetes.list
+deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /
+
+#upgrade kubeadm tool
+sudo apt update
+sudo apt-cache madison kubeadm # this would list the available kubeadm versions
+
+# upgrade kubeadm : replace x in 1.29.x-* with the latest patch version
+sudo apt-mark unhold kubeadm && \
+sudo apt-get update && sudo apt-get install -y kubeadm='1.29.0-1.1' && \
+sudo apt-mark hold kubeadm
+
+kubeadm version # verify the upgrade
+kubeadm upgrade apply v1.29.0  #upgrade kubernetes version of control plane components
+
+# upgrade kubectl : replace x in 1.29.x-* with the latest patch version
+sudo apt-mark unhold kubelet kubectl && \
+sudo apt-get update && sudo apt-get install -y kubelet='1.29.0-1.1' kubectl='1.29.0-1.1' && \
+sudo apt-mark hold kubelet kubectl
+
+sudo systemctl daemon-reload
+sudo systemctl restart kubelet
+
+kubectl uncordon controlplane # make controlplane node schedulable
+
+kubectl version # verify kubectl version
+kubectl get nodes # verify kubernetes version of controlplane node
+#* Upgrade worker node
+kubectl drain node01 --ignore-daemonsets # drain node and make node unschedulable
+ssh nodeName # ssh into node
+# update the repository
+#update package repositories located at /etc/apt/sources.list.d/kubernetes.list
+deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /
+
+#upgrade kubeadm tool , same step as control plane
+kubeadm upgrade node # this would upgrade the worker node
+#upgrade kubelet and kubectl after that 
+# make the node schedulable again
+# verify and finish the upgrade
+
+#? --- ---- Backup and Restore --- -----#
+# option 1)
+# backup full kubernetes cluster
+kubectl get all --all-namespaces -o yaml > all-deploy-services.yaml
+
+# option 2)
+# --data-dir=/var/lib/etcd , this is the place all the etcd data is stored
+# Backup and restore from etcd cluster : https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/
+ETCDCTL_API=3 etcdctl snapshot save snapshot.db # take a snapshot, you have to mention certificates
+ETCDCTL_API=3 etcdctl snapshot save snapshot.db \
+--endpoints=https://127.0.0.0.1:2379 \
+--cacert=/etc/etcd/ca.crt
+--cert=/etc/etcd/etcd
+--key=/etc/etcd/etcd-server.key
+
+ETCDCTL_API=3 etcdctl snapshot status snapshot.db # check the status of the snapshot
+
+# Stop kube-api server before restore
+service kube-apiserver stop
+
+# restore from backup file
+ETCDCTL_API=3 etcdctl snapshot restore snapshot.db --data-dir /var/lib/etcd-from-backup
+# configure the etcd configuration file to use new data directory
+--data-dir=/var/lib/etcd-from-backup
+
+# restart etcd service
+systemctl daemon-reload
+service etcd restart
+
+# start kube-apiserver
+service kube-apiserver start
+
+#* Backup and restore method using kubeadm implementation is mentioned in different file
+
 #!----------------------- Security -------------------------------------------------#
+#? --- TLS Certificates --#
+# What certificates required for each components (server side, client side , root ca)
+# Root Certificates
+CA - car.crt , ca.key
+# Client Certificates
+admin - admin.crt , admin.key
+scheduler - scheduler.crt , scheduler.key
+controller-manager - controller-manager.crt , controller-manager.key
+kube-proxy - kube-proxy.crt , kube-proxy.key
+
+apiserver-kubelet-client - apiserver-kubelet-client.crt , apiserver-kubelet-client.key # kube-apiserver being a client to kubelet
+apiserver-etcd-client - apiserver-etcd-client.crt , apiserver-etcd-client.key # kube-apiserver being a client to kubelet
+kubelet-client - kubelet-client.crt , kubelet-client.key # kubelet being a client to kube-apiserver
+
+# Server certificates for Servers
+etcdserver - edtcdserver.crt , edctserver.key
+apiserver - apiserver.crt , apiserver.key
+kubelet - kubelet.crt , kubelet.key
+
+#* ------------- How to generate a TLS certificate using openSSL ---------- #
+#ref: https://kubernetes.io/docs/tasks/administer-cluster/certificates/#openssl
+
+# Generate CA Certificate - Self Signed
+openssl genrsa -out ca.key 2048 # generate keys
+openssl req -new -key ca.key -subj "/CN=KUBERNETES-CA" -out ca.csr # create certificate signing request for root
+openssl x509 -req -in ca.csr -signkey ca.key -out ca.crt # create self signed certificate for CA
+
+# Generate Client Certificate for Admin User   # https://kubernetes.io/docs/tasks/administer-cluster/certificates/
+openssl genrsa -out admin.key 2048
+openssl req -new -key admin.key -subj "/CN=kube-admin" -out admin.csr # it does have to be kube-admin , however this is the name that kubectl client authenticate when you use kubectl command and persented in audit logs
+openssl x509 -req -in admin.csr -CA ca.crt -CAkey ca.key -out admin.crt # use ca.key to sign
+
+openssl req -new -key admin.key -subj "/CN=kube-admin/O=system.master" -out admin.csr # when generating csr for admin user , user account to be identified as an admin user, it must be associated with SYSTEM:MASTERS group who has admin privileges
+
+# Generate Client Certificate for kube-scheduler
+
+      # kube-scheduler is a systom component , system:kube-scheduler
+openssl req -new -key scheduler.key -subj "/CN=kube-scheduler/O=system.kube-scheduler" -out admin.csr  # CN= name of the component
+      # for other components also use prefix system { system.kube-controller-manager , system.kube-proxy}
+
+#! all components should have have ca.crt (CA root certificate ), whenever you configure a server or client , you need to specify the ca root certificate
+# Generate Server Certificates (Same shit)
+
+# etcd server certificate
+openssl genrsa -out etcdserver.key 2048
+openssl req -new -key etcdserver.key -subj "/CN=etcdserver" -out etcdserver.csr
+openssl x509 -req -in etcdserver.csr -CA ca.crt -CAkey ca.key -out etcdserver.crt
+# for etcd server, we may need additional peer certificate , since its working like as a cluster. Thats one thing
+
+# kube-apiserver certificate
+openssl genrsa -out apiserver.key 2048
+openssl req -new -key apiserver.key -subj "/CN=kube-apiserver" -out apiserver.csr -config openssl.cnf
+#kube-apiserver goes by many names, they are configured seperately in a config file openssl.conf in the section [alt_names]: https://kubernetes.io/docs/tasks/administer-cluster/certificates/#openssl
+openssl x509 -req -in apiserver.csr -CA ca.crt -CAkey ca.key -out apiserver.crt -extensions v3_req -extfile apiserver.crt  #sign the certificte
+
+#kubelet server - is an https apiserver runs on each node
+
+# you need key and certificate pair in each node of the cluster
+# they will be named after their respective nodes
+# node01, node02 , node03
+# once certificates are creted use them in a kubelet config file : https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ , https://kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/
+
+# kubelet client certificates - used to connect to kube-apiserver, their name format should follow : system:node:node01 as such.
+# same time they must be added to a group called SYSTEM:NODES (similar to kube-admin account )
+
+
+# --- Using certificates------------
+# you can use these certificate instead of username and password in a REST API call 
+curtl https://kube-apiserver:6443/api/v1/pods --key admin.key --cert admin.crt --cacert ca.crt # this gives the jason output of podlist
+# other method is move all of these parameter files into a kubernetes configuration file called kube-config.yaml, within that specify api-server endpoint details
+# you must do this for each node in the cluster
+
+# View certificate details 
+
+openssl x509 -in file-path.crt -text -noout
 
 #!----------------------- Storage --------------------------------------------------#
 
