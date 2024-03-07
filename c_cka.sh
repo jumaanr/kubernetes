@@ -68,7 +68,7 @@ crictl pull busybox #pull a container image , here its a docker image
 crictl images # list available images
 crictl ps -a # show all running and non-running containers
 crictl exec -i -t < containerID > ls # run commands in an interactive terminal with pod
-crictl logs # check logs of containers
+crictl logs <containerID> # check logs of containers
 crictl pods # crictl is aware of pods as well 
 
 #? --- ETCD Cluster --- #
@@ -225,7 +225,7 @@ kubectl create service clusterip my-service --tcp=80:8080
 # the service acts like a virtual server inside the node, inside the cluster it has its own ip address . That IP is called as the cluster ip of the service. 
 # all port naming has taken in place with respective to the view of pod
 # TargetPort : port on the pod , Port : port on the service , NodePort : port on the node (30,000-32,767 range of node ports)
-# Port is mandatory , if no targetPort prpvider, it will be considered same as the port . If no nodePort provided , it will be assigned a port automatically within the range.
+# Port is mandatory , if no targetPort provider, it will be considered same as the port . If no nodePort provided , it will be assigned a port automatically within the range.
 
 #* ClusterIP
 # group the pods together and provides a single interface / service point to access the pods in the group 
@@ -812,8 +812,152 @@ curtl https://kube-apiserver:6443/api/v1/pods --key admin.key --cert admin.crt -
 # you must do this for each node in the cluster
 
 # View certificate details 
+filepath=/etc/kuberenetes/pki/server.crt
+openssl x509 -in $filepath -text -noout
 
-openssl x509 -in file-path.crt -text -noout
+crictl ps -a | grep etcd # for troubleshooting
+critcl logs <container-id> # for getting los
+kubectl logs etcd-controlplane -n kube-system # get the logs
+crictl logs --tail=2 1fb242055cff8
+
+# Certificates API
+
+# with certificate API, users can send send csr's directly to kubernetes through an api call
+# this time when administratror receives requrest , instead of logging into master node signing the certificate each time administrator creates
+# creates an kubernetes api object called CertificateSinginigRequest Object
+# once created all the csros in the cluster is visible to the admin
+# the csro's can be reviewd and approved using kubectl command
+# ensure to put the csr in base64 encoded version
+
+cat my.csr | base64 -w 0 # encode the csr
+# ref creat csro object : https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster/#create-a-certificatesigningrequest-object-to-send-to-the-kubernetes-api
+# exipirationSeconds: 600 #seconds  can be also included under spec
+kubectl get csr
+kubectl certificate approva <certificateRequestName> # kubernetes sign the certificate with CA's private key and generates a certificate for user
+kubectl get csr certificateRequestName -o yaml # view in yaml format , still the certificate in base64 version
+echo "textInCertificate" | base64 --decode # this gives the certificate in plaintext format
+# all the certificate related operations carried by controller manager : csr-approving , csr-signing  controllers in it
+# controller amanger has two option to configure ca.crt and ca.key
+# quick way to create csro : https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster/#create-a-certificatesigningrequest-object-to-send-to-the-kubernetes-api
+
+#? --- kubeconfig ----#
+#purpose : helps to access multiple clusters bind  user and cluster -->  context = user+cluster with relevant certificates
+# default file is located $HOME/.kube/config , copy your file and replace the default to make your one default
+
+# specify the kubeconfig file, otherwise it would always refer to deafult file
+# use a certain context configured in a non default kubeconfig file
+kubectl config --kubeconfig=/root/my-kube-config use-context research
+# set the current contex to a specifc context
+kubectl config --kubeconfig=/root/my-kube-config current-context # view current context
+kubectl config --kubeconfig=/root/my-kube-config use-context research # make current context , also you can edit the current context entry in kubeconfif file
+# create a new context to an existing kubeconfig file
+kubectl config --kubeconfig=/root/my-kube-config set-context  
+
+# configure a context to a kubeconfig file
+kubectl config --kubeconfig=/root/my-kube-config  set-context my-newContext --user=michelle --cluster=aws-cluster
+
+
+#? ---- API Groups ---#
+#ref : https://trstringer.com/Kubernetes-API-groups-resources-verbs/
+# ref : https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#pod-v1-core
+# type of verbs
+list
+get
+create
+delete
+update
+watch
+
+
+#? ---- Authorization ----#
+# Michanisms
+# Node Authorization, Attribute based Authorization, Rolbased Access Control , Webhook - External
+--authorization-mode=Node,RBAC,Webhook \\
+
+
+#? ---- RBAC -----#
+# you first create a role with necessary access
+# then you tie that intoa rolebinding object which allows the user
+kubectl create role developer --verb=list,delete,create --resource=pods
+kubectl create rolebinding dev-user-binding --clusterrole=developer --user=dev-user
+
+#? ---- ClusterRoles ---#
+
+# -- View Full List of API Resources -- #
+kubectl api-resources --namespaced=true   # View namespaced resources
+kubectl api-resources --namespaced=false  # View non namespaced resources
+kubectl api-resources -o wide | grep -E "^deployments" # filter api resources
+
+kubectl get clusterroles 
+kubectl get clusterrolebindings
+# clusterroles are clusterwide , not part of namespace
+
+# -- create clusterrole and bind it to a user using clusterrolebinding object
+kubectl create clusterrole node-admin --verb='*' --resource=nodes --dry-run=client -o yaml
+kubectl create clusterrolebinding node-admin-michelle --clusterrole=node-admin --user=michelle  --dry-run=client -o yaml
+
+kubectl create clusterrole storage-admin --verb=list,create,get,watch --resource=storageclasses,persistentvolumes --dry-run=client -o yaml
+kubectl create clusterrolebinding michell-storage-admin --clusterrole=storage-admin --user=michelle
+
+# look for ClusterRole created in definitionfiles : '*' all verbs , supported verbs : list,get,create,update,watch : https://kubernetes.io/docs/reference/using-api/api-concepts/
+
+#? ---- Service Accounts ---#
+
+kubectl get serviceaccounts # get the list of SA available in current namespace
+kubectl create token dashboard-sa # create a token
+
+#? ---- Image Security ----#
+
+# image : docker.io/libary/nginx
+#         {registry}/{user/account}/{image/repository}
+
+# -- login into private registry in docker:
+docker login private-registry.io #login
+docker run private-registry.io/apps/internal-app # use image from private registry to run docker container
+
+# create a docker registry secret
+kubectl create secret docker-registry registryname \
+--docker-server=private-registry.io \
+--docker-username=registry-user \
+--docker-password=registry-password \
+--docker-email=registry-user@org.com \
+
+kubectl get secret # view secret
+
+# add secret to deployment or pod under spec: section
+# imagePullSecrets:  #ref : https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+
+#? ---- Security in Docker ----#
+# docker run as root user by default , but capabilities of root user are restricted by docker
+# can run as a different user during execution time or DOCKERFILE level
+docker run --user=1010 ubuntu sleep 10000
+#DOCKERFILE
+FROM UBUNTU
+USER 1000
+# capabilities can be viewed at /usr/include/linux/capability.h 
+# capabilites can be added at runtime like below
+docker run --cap-add MAC_ADMIN ubuntu
+# capabilities can be removed like below
+docker run --cap-drop KILL ubuntu
+# enable all privileges
+docker run --privileged ubuntu
+
+#? ---- Security Contexts -----#
+# same docker capabilities can be provided at container level and pod level
+# contianerlevel security context (user running with what capabilities) always override pod level security context
+# ref : https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+# keyword : under spec: securityContext --> runASUser: , capabilities:
+
+#? ---- Network Policies -----#
+
+# network poilicy restric/allow certain traffic to pods
+# by default pods can communicate with each other using their own virtual private network, and all type of traffic are alloweds
+# if ingress rules only defined in network policy , egress wont be effected
+# you can define ingress , egress rules and attach pods into the poilcies using labels and selectors (similar to network security groups)
+# generic ports can be opened without specifying the target : see networkpolicy.yaml
+kubectl get networkpolicies #view network policy
+
+
 
 #!----------------------- Storage --------------------------------------------------#
 
