@@ -958,8 +958,27 @@ docker run --privileged ubuntu
 kubectl get networkpolicies #view network policy
 
 
-
 #!----------------------- Storage --------------------------------------------------#
+# create volumes inside pod : https://kubernetes.io/docs/concepts/storage/volumes/
+
+#? --- Persistent Volumes --- #
+
+kubectl get persistentvolumes
+# create persistent volumes : https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+# configure pv : https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+# create persistent volumes using hostPath option : https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/#create-a-persistentvolume
+
+# --- persistent volume claims ---
+
+kubectl get persistentvolumeclaims
+
+# claims attached as volumes inside pods : https://kubernetes.io/docs/concepts/storage/persistent-volumes/#claims-as-volumes
+# https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/#create-a-persistentvolume
+
+# --- Storage Classes ---#
+
+#https://kubernetes.io/docs/concepts/storage/storage-classes/
+kubectl get storageclasses
 
 #!----------------------- Networking -----------------------------------------------#
 
